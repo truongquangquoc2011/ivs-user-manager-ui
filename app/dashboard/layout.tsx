@@ -1,59 +1,138 @@
-"use client";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+'use client';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+import PageTransition from '@/src/components/PageTransition';
+import { AuthProvider, useAuth } from '@/src/hook/useAuth';
+
+const NAV_ITEMS = [
+  { href: '/dashboard/user', label: 'Người dùng', feature: 'USER_MANAGEMENT', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+  { href: '/dashboard/group', label: 'Nhóm', feature: 'GROUP_MANAGEMENT', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },
+  { href: '/dashboard/permission', label: 'Phân quyền', feature: 'PERMISSION_MANAGEMENT', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+  { href: '/dashboard/profile', label: 'Hồ sơ', feature: 'PROFILE', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+];
+
+function NavIcon({ d }: { d: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function Sidebar() {
+  const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const { profile, hasPermission } = useAuth();
 
-  useEffect(() => {
-    const savedUser = JSON.parse(localStorage.getItem("user") || "null");
-    if (!savedUser) {
-      router.push("/login");
-    } else {
-      setUser(savedUser);
-    }
-  }, [router]);
+  const handleLogout = () => {
+    localStorage.clear();
+    router.push('/');
+  };
 
-  if (!user) return null;
+  const visibleNav = NAV_ITEMS.filter(item => {
+    if (item.feature === 'PROFILE') return true;
+    return hasPermission(item.feature, 'canView');
+  });
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-slate-800 text-white p-6 shadow-xl">
-        <h2 className="text-xl font-bold mb-8 text-blue-400 uppercase tracking-tighter">Hệ Thống Phân Quyền</h2>
-        <nav className="space-y-4">
-          <a href="/dashboard/user" className="block p-2 hover:bg-slate-700 rounded transition font-medium">👥 Quản lý Người dùng</a>
-          <a href="/dashboard/groups" className="block p-2 hover:bg-slate-700 rounded transition font-medium">📁 Quản lý Nhóm</a>
-          {/* Chỉ Admin mới thấy mục Phân quyền */}
-          {user.groupName === "Admin" && (
-            <a href="/dashboard/permissions" className="block p-2 hover:bg-slate-700 rounded transition font-medium border-l-4 border-blue-500 pl-4">⚙️ Phân quyền</a>
-          )}
-          <div className="pt-8 border-t border-slate-700">
-            <a href="/dashboard/profile" className="block p-2 text-sm text-gray-400 hover:text-white">Cá nhân</a>
-            <button 
-              onClick={() => { localStorage.clear(); router.push("/"); }}
-              className="block p-2 text-sm text-red-400 hover:text-red-300 w-full text-left"
-            >
-              Đăng xuất
-            </button>
-          </div>
-        </nav>
-      </aside>
+    <aside
+      className="w-[220px] flex-shrink-0 flex flex-col h-screen sticky top-0"
+      style={{ background: 'var(--bg-sidebar)' }}
+    >
+      {/* Logo */}
+      <div className="px-5 py-6 flex items-center gap-2.5 border-b" style={{ borderColor: '#1e1e1c' }}>
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-semibold text-xs flex-shrink-0"
+          style={{ background: 'var(--accent)' }}
+        >
+          IV
+        </div>
+        <span className="text-sm font-medium tracking-wide" style={{ color: '#f0efe8' }}>
+          IVS Manager
+        </span>
+      </div>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 overflow-y-auto">
-        <header className="bg-white p-4 shadow-sm flex justify-between items-center px-8">
-          <div className="text-sm text-gray-500 font-medium">Trang quản trị / <span className="text-gray-800 uppercase">{user.groupName}</span></div>
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-gray-700">{user.fullName}</span>
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-               {user.fullName[0]}
-            </div>
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {visibleNav.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                background: active ? 'var(--bg-sidebar-active)' : 'transparent',
+                color: active ? 'var(--text-sidebar-active)' : 'var(--text-sidebar)',
+              }}
+            >
+              <NavIcon d={item.icon} />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User info */}
+      <div className="px-3 pb-4 border-t pt-4" style={{ borderColor: '#1e1e1c' }}>
+        {profile && (
+          <div className="px-3 py-2.5 mb-2">
+            <p className="text-xs font-medium truncate" style={{ color: '#f0efe8' }}>
+              {profile.fullname || profile.email}
+            </p>
+            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-sidebar)' }}>
+              {profile.groups.map(g => g.name).join(', ')}
+            </p>
           </div>
-        </header>
-        <div className="p-8">{children}</div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer"
+          style={{ color: '#666660' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
+          Đăng xuất
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function DashboardInner({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { loading } = useAuth();
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) router.push('/');
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Đang tải...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto" style={{ background: 'var(--bg)' }}>
+        <PageTransition>{children}</PageTransition>
       </main>
     </div>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <DashboardInner>{children}</DashboardInner>
+    </AuthProvider>
   );
 }
