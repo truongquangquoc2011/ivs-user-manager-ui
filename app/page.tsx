@@ -1,26 +1,21 @@
 'use client';
+
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/src/lib/api';
 
-const TEST_ACCOUNTS = [
-  { role: 'ProAdmin', email: 'proadmin@gmail.com', dot: '#c8a96e' },
-  { role: 'Admin',   email: 'admin@gmail.com',    dot: '#8b9dc3' },
-  { role: 'Manager', email: 'manager@gmail.com',  dot: '#9bc49b' },
-  { role: 'HR',      email: 'hr@gmail.com',        dot: '#c49bb3' },
-];
-
 export default function LoginPage() {
-  const [email, setEmail]       = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
     try {
       const res = await authApi.login({ email, password });
       localStorage.setItem('accessToken', res.data.accessToken);
@@ -28,170 +23,159 @@ export default function LoginPage() {
       localStorage.setItem('email', res.data.email);
       router.push('/dashboard/user');
     } catch (err: any) {
-      setError(err.message || 'Không thể kết nối đến máy chủ.');
+      setError(err.message || 'The email you entered is not registered, please check again');
       setLoading(false);
     }
   };
 
-  const fill = (acc: typeof TEST_ACCOUNTS[0]) => {
-    setEmail(acc.email);
-    setPassword('123456');
-    setError('');
-  };
-
   return (
-    <div className="min-h-screen flex bg-[#f4f3ef]">
+    <main className="grid h-screen overflow-hidden bg-white text-slate-950 lg:grid-cols-[50vw_1fr]">
+      <section className="relative hidden h-screen overflow-hidden bg-slate-950 lg:flex lg:flex-col lg:justify-end">
+        <div className="absolute inset-x-0 top-0 bottom-[31.5%] overflow-hidden bg-[#07111d]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_25%,rgba(16,185,129,.24),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(148,163,184,.18),transparent_26%),linear-gradient(135deg,#020617_0%,#0f172a_48%,#031a16_100%)]" />
+          <div className="absolute left-[-8%] top-[18%] h-[180px] w-[120%] rotate-[-14deg] border-y border-emerald-400/40 bg-white/5 shadow-[0_0_70px_rgba(16,185,129,.35)]" />
+          <div className="absolute right-[12%] top-0 h-full w-[38%] border-x border-white/10 bg-[repeating-linear-gradient(90deg,rgba(255,255,255,.11)_0px,rgba(255,255,255,.11)_1px,transparent_1px,transparent_12px)] opacity-50" />
+          <div className="absolute bottom-0 left-0 h-[42%] w-full bg-gradient-to-t from-black/70 to-transparent" />
+        </div>
 
-      {/* ── LEFT PANEL ── */}
-      <div className="hidden lg:flex w-[420px] flex-shrink-0 flex-col justify-between p-11 bg-[#121210] border-r border-[#1e1e1a]">
-
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-[11px] font-bold tracking-wide">
-            IV
+        <div className="relative z-10 min-h-[31.5vh] border-t-[6px] border-emerald-500 bg-slate-950 px-14 py-10 text-white">
+          <div className="mb-7 flex items-center gap-3">
+            <span className="text-[34px] font-black leading-none tracking-[-0.12em] text-emerald-500">
+              H
+            </span>
+            <span className="text-xl font-extrabold tracking-[-0.04em]">
+              IVS Company
+            </span>
           </div>
-          <span className="text-[13px] font-medium text-[#d0cfc8] tracking-widest uppercase">
-            IVS Manager
-          </span>
-        </div>
 
-        {/* Hero */}
-        <div>
-          <p className="text-[10px] font-mono text-[#383833] tracking-[0.2em] uppercase mb-5">
-            RBAC · v2.0
-          </p>
-          <h1 className="text-[40px] leading-[1.15] text-[#eeeee6] font-light mb-5">
-            Quản lý<br />
-            <span className="italic text-[#c8a96e]">phân quyền</span><br />
-            người dùng
-          </h1>
-          <p className="text-[14px] text-[#484842] leading-[1.8] max-w-[300px]">
-            Role-based access control — kiểm soát quyền truy cập chính xác cho từng nhóm trong tổ chức.
+          <h2 className="mb-5 max-w-xl text-[50px] font-extrabold leading-[1.08] tracking-[-0.055em]">
+            Empower your team.
+            <br />
+            Manage access with clarity.
+          </h2>
+
+          <p className="text-lg leading-relaxed text-white/80">
+            Internal User Management & Permission Control System.
           </p>
         </div>
+      </section>
 
-        {/* Test accounts */}
-        <div>
-          <div className="w-9 h-px bg-[#232320] mb-7" />
-          <p className="text-[9px] font-mono text-[#333330] tracking-[0.22em] uppercase mb-3">
-            Test accounts
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {TEST_ACCOUNTS.map(a => (
-              <button
-                key={a.role}
-                type="button"
-                onClick={() => fill(a)}
-                className="bg-[#181815] border border-[#222220] rounded-[9px] p-3 text-left hover:bg-[#1e1e1a] hover:border-[#2e2e28] transition-colors cursor-pointer"
-              >
-                <div className="w-1.5 h-1.5 rounded-full mb-2" style={{ background: a.dot }} />
-                <span className="block text-[11px] font-semibold text-[#cccbc4] tracking-wide">{a.role}</span>
-                <span className="block text-[9px] font-mono text-[#444440] mt-0.5 truncate">{a.email}</span>
-              </button>
-            ))}
-          </div>
-          <p className="text-[9px] font-mono text-[#333330] mt-2.5">
-            ↑ click để điền nhanh · password: 123456
-          </p>
-        </div>
-      </div>
+      <section className="relative flex h-screen items-center justify-center overflow-hidden px-6 py-6 lg:px-[6vw]">
+        <div className="relative w-full max-w-[480px]">
+          <svg
+            className="pointer-events-none absolute -left-16 -top-20 hidden h-24 w-28 opacity-15 lg:block"
+            viewBox="0 0 140 120"
+            fill="none"
+          >
+            <path
+              d="M9 39C33 2 82 8 104 45C113 60 115 77 112 93"
+              stroke="#111827"
+              strokeWidth="5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M91 72L112 95L132 70"
+              stroke="#111827"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
 
-      {/* ── RIGHT PANEL ── */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-[380px]">
-
-          {/* Heading */}
-          <div className="mb-8">
-            <h2 className="text-[32px] font-light text-[#121210] mb-1.5 leading-tight">
-              Đăng nhập
-            </h2>
-            <p className="text-[14px] text-[#88887f]">
-              Nhập thông tin tài khoản để tiếp tục
+          <div className="mb-7 text-center">
+            <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.035em] text-slate-950">
+              Login first to your account
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Enter your account information to continue
             </p>
           </div>
 
           <form onSubmit={handleLogin} noValidate>
-
-            {/* Error box */}
-            {error && (
-              <div className="flex gap-3 p-3.5 mb-5 bg-red-50 border border-red-200 border-l-[3px] border-l-red-500 rounded-lg">
-                <span className="text-red-500 text-[15px] mt-0.5 flex-shrink-0">⚠</span>
-                <div>
-                  <p className="text-[13.5px] font-medium text-red-700 leading-snug">{error}</p>
-                  <p className="text-[12px] text-red-400 mt-1">Kiểm tra lại email và mật khẩu rồi thử lại.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Email */}
-            <div className="mb-4">
-              <label className="block text-[10px] font-mono text-[#888882] tracking-[0.18em] uppercase mb-2">
-                Email
+            <div className="mb-5">
+              <label className="mb-2 block text-sm font-semibold text-slate-950">
+                Email Address <span className="text-red-500">*</span>
               </label>
+
               <input
                 type="email"
                 value={email}
-                onChange={e => { setEmail(e.target.value); setError(''); }}
-                placeholder="admin@gmail.com"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError('');
+                }}
+                placeholder="Input your registered email"
                 required
-                className={`w-full px-4 py-3.5 bg-white rounded-[9px] text-[15px] text-[#121210] outline-none transition-all placeholder:text-[#c4c3bc] ${
+                className={`h-14 w-full rounded-[10px] border bg-white px-5 text-[15px] text-slate-950 outline-none transition placeholder:text-slate-300 ${
                   error
-                    ? 'border-[1.5px] border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-[1.5px] border-[#e0dfd9] focus:border-[#121210] focus:ring-2 focus:ring-black/5'
+                    ? 'border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10'
                 }`}
               />
+
+              {error && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-red-500">
+                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-red-500 text-[10px]">
+                    !
+                  </span>
+                  {error}
+                </p>
+              )}
             </div>
 
-            {/* Password */}
-            <div className="mb-6">
-              <label className="block text-[10px] font-mono text-[#888882] tracking-[0.18em] uppercase mb-2">
-                Mật khẩu
+            <div className="mb-5">
+              <label className="mb-2 block text-sm font-semibold text-slate-950">
+                Password <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError(''); }}
-                placeholder="••••••••"
-                required
-                className={`w-full px-4 py-3.5 bg-white rounded-[9px] text-[15px] text-[#121210] outline-none transition-all placeholder:text-[#c4c3bc] ${
-                  error
-                    ? 'border-[1.5px] border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-[1.5px] border-[#e0dfd9] focus:border-[#121210] focus:ring-2 focus:ring-black/5'
-                }`}
-              />
+
+              <div className="relative">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  placeholder="Input your password account"
+                  required
+                  className="h-14 w-full rounded-[10px] border border-slate-200 bg-white px-5 pr-12 text-[15px] text-slate-950 outline-none transition placeholder:text-slate-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                />
+
+                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-800">
+                  ⊘
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-6 flex items-center justify-between text-sm text-slate-500">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500 text-xs font-bold text-white">
+                  ✓
+                </span>
+                <span>Remember Me</span>
+              </div>
+
+              <button type="button" className="text-slate-500">
+                Forgot Password
+              </button>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-[#121210] text-[#eeeee6] rounded-[9px] text-[15px] font-medium tracking-wide hover:bg-[#1e1e1a] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="h-14 w-full rounded-[10px] bg-slate-950 text-[15px] font-extrabold text-white transition hover:bg-black active:scale-[.99] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
             >
-              {loading ? 'Đang xác thực...' : 'Đăng nhập →'}
+              {loading ? 'Đang xác thực...' : 'Login'}
             </button>
           </form>
-
-          {/* Mobile accounts */}
-          <div className="lg:hidden mt-7 pt-6 border-t border-[#dddcd7]">
-            <p className="text-[9px] font-mono text-[#aaa89f] tracking-[0.18em] uppercase mb-2.5">
-              Test accounts
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {TEST_ACCOUNTS.map(a => (
-                <button
-                  key={a.role}
-                  type="button"
-                  onClick={() => fill(a)}
-                  className="p-2.5 bg-white border border-[#e0dfd9] rounded-lg text-left hover:border-[#121210] transition-colors cursor-pointer"
-                >
-                  <span className="block text-[12px] font-semibold text-[#121210]">{a.role}</span>
-                  <span className="block text-[9px] font-mono text-[#aaa89f] mt-0.5 truncate">{a.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
         </div>
-      </div>
-    </div>
+
+        <div className="absolute bottom-5 left-6 right-6 hidden justify-center gap-4 text-[13px] text-slate-400 xl:flex">
+          <span>© 2025 IVS Company. All rights reserved.</span>
+          <span className="text-slate-950">Terms & Conditions</span>
+          <span className="text-slate-950">Privacy Policy</span>
+        </div>
+      </section>
+    </main>
   );
 }
