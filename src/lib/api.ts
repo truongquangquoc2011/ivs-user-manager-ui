@@ -142,16 +142,50 @@ export const groupApi = {
 // ─── Profile ──────────────────────────────────────────────────────────────────
 export const profileApi = {
   get: () => apiFetch<ProfileResponse>("/api/v1/profile"),
+
   update: (body: Partial<ProfileResponse>) =>
     apiFetch<ProfileResponse>("/api/v1/profile", {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  changePassword: (body: { oldPassword: string; newPassword: string }) =>
-    apiFetch<null>("/api/v1/change-password", {
+
+  changePassword: (body: {
+    oldPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) =>
+    apiFetch<null>("/api/v1/profile/change-password", {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+
+  uploadAvatar: async (file: File) => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("accessToken")
+        : null;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`${BASE_URL}/api/v1/profile/avatar`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      const err = new Error(json.message || "Upload avatar thất bại") as any;
+      err.status = res.status;
+      throw err;
+    }
+
+    return json;
+  },
 };
 
 // ─── Features ─────────────────────────────────────────────────────────────────

@@ -101,6 +101,7 @@ export interface ProfileResponse {
   email: string;
   fullname: string;
   phoneNumber: string;
+  avatar?: string;
   status: UserStatus;
   groups: ProfileGroupResponse[];
   permissions: PermissionResponse[];
