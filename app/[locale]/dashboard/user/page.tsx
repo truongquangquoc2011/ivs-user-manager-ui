@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { authApi, groupApi, safeCall, userApi } from "@/src/lib/api";
 import { GroupResponse, UserResponse, UserStatus } from "@/src/types";
 import { useAuth } from "@/src/hook/useAuth";
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  ACTIVE: { label: "Active", className: "bg-[#0ac451] text-white" },
-  INACTIVE: { label: "Inactive", className: "bg-slate-400 text-white" },
-  LOCKED: { label: "Banned", className: "bg-red-500 text-white" },
+const STATUS_CONFIG: Record<string, { labelKey: string; className: string }> = {
+  ACTIVE: { labelKey: "active", className: "bg-[#0ac451] text-white" },
+  INACTIVE: { labelKey: "inactive", className: "bg-slate-400 text-white" },
+  LOCKED: { labelKey: "banned", className: "bg-red-500 text-white" },
 };
 
 const ROLE_CONFIG: Record<string, string> = {
@@ -17,6 +18,7 @@ const ROLE_CONFIG: Record<string, string> = {
   Manager: "bg-[#5c7598] text-white",
   HR: "bg-[#9aa9bf] text-white",
 };
+
 type FormErrors = Partial<{
   email: string;
   password: string;
@@ -25,28 +27,58 @@ type FormErrors = Partial<{
   status: string;
   groupId: string;
 }>;
+
+type ToastType = "success" | "error" | "warning";
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: ToastType;
+  message: string;
+  onClose: () => void;
+}) {
+  const bg =
+    type === "success"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : type === "warning"
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : "bg-red-50 text-red-700 border-red-200";
+
+  return (
+    <div
+      className={`fixed right-6 top-6 z-[9999] min-w-[280px] rounded-xl border px-4 py-3 shadow-lg ${bg}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm font-medium">{message}</p>
+        <button onClick={onClose} className="text-sm opacity-70 hover:opacity-100">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
+  const t = useTranslations("userPage");
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.INACTIVE;
 
   return (
-    <span
-      className={`inline-flex min-w-[72px] justify-center rounded-full px-3 py-1 text-xs font-bold ${cfg.className}`}
-    >
-      {cfg.label}
+    <span className={`inline-flex min-w-[72px] justify-center rounded-full px-3 py-1 text-xs font-bold ${cfg.className}`}>
+      {t(cfg.labelKey as any)}
     </span>
   );
 }
+
 function RoleBadge({ role }: { role: string }) {
   return (
-    <span
-      className={`inline-flex min-w-[90px] justify-center rounded-full px-3 py-1 text-xs font-semibold ${
-        ROLE_CONFIG[role] ?? "bg-slate-200 text-slate-700"
-      }`}
-    >
+    <span className={`inline-flex min-w-[90px] justify-center rounded-full px-3 py-1 text-xs font-semibold ${ROLE_CONFIG[role] ?? "bg-slate-200 text-slate-700"}`}>
       {role}
     </span>
   );
 }
+
 function Modal({
   open,
   onClose,
@@ -65,10 +97,7 @@ function Modal({
       <div className="w-full max-w-[470px] rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-xl font-extrabold text-[#193153]">{title}</h3>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100"
-          >
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100">
             ✕
           </button>
         </div>
@@ -79,6 +108,7 @@ function Modal({
 }
 
 export default function UserPage() {
+  const t = useTranslations("userPage");
   const { hasPermission } = useAuth();
 
   const canEdit = hasPermission("USER_MANAGEMENT", "canEdit");
@@ -96,10 +126,7 @@ export default function UserPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [sortKey, setSortKey] = useState<
-    "fullname" | "email" | "username" | "status" | "role" | "createdAt"
-  >("createdAt");
-
+  const [sortKey, setSortKey] = useState<"fullname" | "email" | "username" | "status" | "role" | "createdAt">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -109,6 +136,17 @@ export default function UserPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const [toast, setToast] = useState<{
+    type: ToastType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const [form, setForm] = useState<{
     email: string;
     fullname: string;
@@ -130,30 +168,24 @@ export default function UserPage() {
     phoneNumber: "",
     groupId: "",
   });
-  const validateEmail = (email: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+  const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validatePhone = (phone: string) => /^(0|\+84)[0-9]{9,10}$/.test(phone);
 
   const validateEditForm = () => {
     const errors: FormErrors = {};
 
-    if (!form.email.trim()) errors.email = "Email không được để trống";
-    else if (!validateEmail(form.email.trim()))
-      errors.email = "Email không đúng định dạng";
+    if (!form.email.trim()) errors.email = t("errors.emailEmpty");
+    else if (!validateEmail(form.email.trim())) errors.email = t("errors.emailInvalid");
 
-    if (!form.fullname.trim()) errors.fullname = "Họ tên không được để trống";
-    else if (form.fullname.trim().length < 2)
-      errors.fullname = "Họ tên phải có ít nhất 2 ký tự";
+    if (!form.fullname.trim()) errors.fullname = t("errors.fullnameEmpty");
+    else if (form.fullname.trim().length < 2) errors.fullname = t("errors.fullnameShort");
 
-    if (!form.phoneNumber.trim())
-      errors.phoneNumber = "Số điện thoại không được để trống";
-    else if (!validatePhone(form.phoneNumber.trim()))
-      errors.phoneNumber = "Số điện thoại không hợp lệ";
+    if (!form.phoneNumber.trim()) errors.phoneNumber = t("errors.phoneEmpty");
+    else if (!validatePhone(form.phoneNumber.trim())) errors.phoneNumber = t("errors.phoneInvalid");
 
-    if (!form.status) errors.status = "Vui lòng chọn trạng thái";
-
-    if (!form.groupIds.length) errors.groupId = "Vui lòng chọn role";
+    if (!form.status) errors.status = t("errors.statusEmpty");
+    if (!form.groupIds.length) errors.groupId = t("errors.groupEmpty");
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -162,49 +194,36 @@ export default function UserPage() {
   const validateRegisterForm = () => {
     const errors: FormErrors = {};
 
-    if (!regForm.email.trim()) errors.email = "Email không được để trống";
-    else if (!validateEmail(regForm.email.trim()))
-      errors.email = "Email không đúng định dạng";
+    if (!regForm.email.trim()) errors.email = t("errors.emailEmpty");
+    else if (!validateEmail(regForm.email.trim())) errors.email = t("errors.emailInvalid");
 
-    if (!regForm.password.trim())
-      errors.password = "Mật khẩu không được để trống";
-    else if (regForm.password.length < 6)
-      errors.password = "Mật khẩu phải có ít nhất 6 ký tự";
+    if (!regForm.password.trim()) errors.password = t("errors.passwordEmpty");
+    else if (regForm.password.length < 6) errors.password = t("errors.passwordShort");
 
-    if (!regForm.fullname.trim())
-      errors.fullname = "Họ tên không được để trống";
-    else if (regForm.fullname.trim().length < 2)
-      errors.fullname = "Họ tên phải có ít nhất 2 ký tự";
+    if (!regForm.fullname.trim()) errors.fullname = t("errors.fullnameEmpty");
+    else if (regForm.fullname.trim().length < 2) errors.fullname = t("errors.fullnameShort");
 
-    if (!regForm.phoneNumber.trim())
-      errors.phoneNumber = "Số điện thoại không được để trống";
-    else if (!validatePhone(regForm.phoneNumber.trim()))
-      errors.phoneNumber = "Số điện thoại không hợp lệ";
+    if (!regForm.phoneNumber.trim()) errors.phoneNumber = t("errors.phoneEmpty");
+    else if (!validatePhone(regForm.phoneNumber.trim())) errors.phoneNumber = t("errors.phoneInvalid");
 
-    if (!regForm.groupId) errors.groupId = "Vui lòng chọn role";
+    if (!regForm.groupId) errors.groupId = t("errors.groupEmpty");
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
+
   const load = async () => {
     setLoading(true);
 
     const skip = (page - 1) * take;
 
     const [usersRes, groupsRes] = await Promise.all([
-      safeCall(
-        () =>
-          userApi.getAll({
-            skip,
-            take,
-          }),
-        {
-          items: [],
-          total: 0,
-          skip,
-          take,
-        },
-      ),
+      safeCall(() => userApi.getAll({ skip, take }), {
+        items: [],
+        total: 0,
+        skip,
+        take,
+      }),
       safeCall(() => groupApi.getAll(), []),
     ]);
 
@@ -217,6 +236,7 @@ export default function UserPage() {
   useEffect(() => {
     load();
   }, [page, take]);
+
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -231,6 +251,7 @@ export default function UserPage() {
     if (sortKey !== key) return "↕";
     return sortDir === "asc" ? "↑" : "↓";
   };
+
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -247,26 +268,16 @@ export default function UserPage() {
         roleFilter === "ALL" ||
         user.groups?.some((g) => String(g.id) === roleFilter);
 
-      const matchStatus =
-        statusFilter === "ALL" || user.status === statusFilter;
+      const matchStatus = statusFilter === "ALL" || user.status === statusFilter;
 
       return matchSearch && matchRole && matchStatus;
     });
 
     return [...result].sort((a, b) => {
       const getValue = (user: UserResponse) => {
-        if (sortKey === "username") {
-          return user.email?.split("@")[0] ?? "";
-        }
-
-        if (sortKey === "role") {
-          return user.groups?.[0]?.name ?? "";
-        }
-
-        if (sortKey === "createdAt") {
-          return (user as any).createdAt ?? "";
-        }
-
+        if (sortKey === "username") return user.email?.split("@")[0] ?? "";
+        if (sortKey === "role") return user.groups?.[0]?.name ?? "";
+        if (sortKey === "createdAt") return (user as any).createdAt ?? "";
         return String((user as any)[sortKey] ?? "");
       };
 
@@ -278,11 +289,11 @@ export default function UserPage() {
       return 0;
     });
   }, [users, search, roleFilter, statusFilter, sortKey, sortDir]);
+
   const totalPages = Math.max(1, Math.ceil(total / take));
-
   const fromRow = total === 0 ? 0 : (page - 1) * take + 1;
-
   const toRow = Math.min(page * take, total);
+
   const openEdit = (user: UserResponse) => {
     setEditingUser(user);
     setError("");
@@ -298,6 +309,7 @@ export default function UserPage() {
 
     setModalOpen(true);
   };
+
   const handleSave = async () => {
     if (!editingUser) return;
     if (!validateEditForm()) return;
@@ -315,9 +327,12 @@ export default function UserPage() {
       });
 
       setModalOpen(false);
+      showToast("success", t("messages.updateSuccess"));
       load();
     } catch (e: any) {
-      setError(e.message);
+      const message = e.message || t("messages.updateFailed");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSaving(false);
     }
@@ -332,9 +347,12 @@ export default function UserPage() {
     try {
       await userApi.delete(deleteConfirm.id);
       setDeleteConfirm(null);
+      showToast("success", t("messages.deleteSuccess"));
       load();
     } catch (e: any) {
-      setError(e.message);
+      const message = e.message || t("messages.deleteFailed");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSaving(false);
     }
@@ -365,9 +383,12 @@ export default function UserPage() {
       });
       setFormErrors({});
 
+      showToast("success", t("messages.createSuccess"));
       load();
     } catch (e: any) {
-      setError(e.message);
+      const message = e.message || t("messages.createFailed");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSaving(false);
     }
@@ -375,43 +396,37 @@ export default function UserPage() {
 
   const inputCls =
     "h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-[#193153] outline-none transition placeholder:text-slate-400 focus:border-[#193153] focus:ring-4 focus:ring-[#193153]/10";
-  const errorInputCls =
-    "border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/10";
-
+  const errorInputCls = "border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/10";
   const fieldErrorCls = "mt-1 px-1 text-xs font-medium text-red-500";
+
   return (
     <div className="flex min-h-screen w-full bg-white p-6 text-[#193153]">
+      {toast && (
+        <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />
+      )}
+
       <div className="flex min-h-0 w-full flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="mb-8">
           <h1 className="text-[32px] font-extrabold leading-tight tracking-[-0.04em]">
-            User Management
+            {t("title")}
           </h1>
-          <p className="mt-2 text-[15px] text-[#193153]">
-            Manage all users in one place. Control access, assign roles, and
-            monitor activity across your platform.
-          </p>
+          <p className="mt-2 text-[15px] text-[#193153]">{t("subtitle")}</p>
         </div>
 
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="relative">
-              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500">
-                ⌕
-              </span>
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500">⌕</span>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search"
+                placeholder={t("search")}
                 className="h-11 w-[310px] rounded-full border border-slate-300 bg-white pl-12 pr-5 text-sm outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-600/15"
               />
             </div>
 
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm outline-none"
-            >
-              <option value="ALL">Role</option>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm outline-none">
+              <option value="ALL">{t("roleAll")}</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
@@ -419,24 +434,17 @@ export default function UserPage() {
               ))}
             </select>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm outline-none"
-            >
-              <option value="ALL">Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="LOCKED">Banned</option>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm outline-none">
+              <option value="ALL">{t("statusAll")}</option>
+              <option value="ACTIVE">{t("active")}</option>
+              <option value="INACTIVE">{t("inactive")}</option>
+              <option value="LOCKED">{t("banned")}</option>
             </select>
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold"
-            >
-              ⇧ Export
+            <button type="button" className="h-11 rounded-full border border-slate-300 bg-white px-6 text-sm font-semibold">
+              ⇧ {t("export")}
             </button>
 
             {canCreate && (
@@ -456,7 +464,7 @@ export default function UserPage() {
                 }}
                 className="h-11 rounded-full bg-[#193153] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#12243f]"
               >
-                ＋ Add User
+                ＋ {t("addUser")}
               </button>
             )}
           </div>
@@ -470,102 +478,61 @@ export default function UserPage() {
                   <input type="checkbox" className="h-4 w-4 rounded" />
                 </th>
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("fullname")}
-                    className="hover:underline"
-                  >
-                    Full Name {sortIcon("fullname")}
+                  <button onClick={() => handleSort("fullname")} className="hover:underline">
+                    {t("fullName")} {sortIcon("fullname")}
                   </button>
                 </th>
-
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("email")}
-                    className="hover:underline"
-                  >
-                    Email {sortIcon("email")}
+                  <button onClick={() => handleSort("email")} className="hover:underline">
+                    {t("email")} {sortIcon("email")}
                   </button>
                 </th>
-
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("username")}
-                    className="hover:underline"
-                  >
-                    Username {sortIcon("username")}
+                  <button onClick={() => handleSort("username")} className="hover:underline">
+                    {t("username")} {sortIcon("username")}
                   </button>
                 </th>
-
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("status")}
-                    className="hover:underline"
-                  >
-                    Status {sortIcon("status")}
+                  <button onClick={() => handleSort("status")} className="hover:underline">
+                    {t("status")} {sortIcon("status")}
                   </button>
                 </th>
-
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("role")}
-                    className="hover:underline"
-                  >
-                    Role {sortIcon("role")}
+                  <button onClick={() => handleSort("role")} className="hover:underline">
+                    {t("role")} {sortIcon("role")}
                   </button>
                 </th>
-
                 <th className="px-4 font-bold">
-                  <button
-                    onClick={() => handleSort("createdAt")}
-                    className="hover:underline"
-                  >
-                    Joined Date {sortIcon("createdAt")}
+                  <button onClick={() => handleSort("createdAt")} className="hover:underline">
+                    {t("joinedDate")} {sortIcon("createdAt")}
                   </button>
                 </th>
-
-                <th className="px-4 text-center font-bold">Actions</th>
+                <th className="px-4 text-center font-bold">{t("actions")}</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-12 text-center text-slate-400"
-                  >
-                    Đang tải dữ liệu...
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                    {t("loading")}
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-12 text-center text-slate-400"
-                  >
-                    Không có người dùng phù hợp
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                    {t("noData")}
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((user, index) => {
-                  const username =
-                    user.email?.split("@")[0] || `user${user.id}`;
-                  const avatarText = (user.fullname || user.email || "?")
-                    .charAt(0)
-                    .toUpperCase();
+                  const username = user.email?.split("@")[0] || `user${user.id}`;
+                  const avatarText = (user.fullname || user.email || "?").charAt(0).toUpperCase();
 
                   return (
-                    <tr
-                      key={user.id}
-                      className={`h-[42px] border-b border-slate-200 ${
-                        index % 2 === 0 ? "bg-white" : "bg-[#f1f6fc]"
-                      }`}
-                    >
+                    <tr key={user.id} className={`h-[42px] border-b border-slate-200 ${index % 2 === 0 ? "bg-white" : "bg-[#f1f6fc]"}`}>
                       <td className="px-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300"
-                        />
+                        <input type="checkbox" className="h-4 w-4 rounded border-slate-300" />
                       </td>
 
                       <td className="px-4">
@@ -573,9 +540,7 @@ export default function UserPage() {
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-bold">
                             {avatarText}
                           </div>
-                          <span className="font-medium">
-                            {user.fullname || "No name"}
-                          </span>
+                          <span className="font-medium">{user.fullname || t("noName")}</span>
                         </div>
                       </td>
 
@@ -588,19 +553,13 @@ export default function UserPage() {
 
                       <td className="px-4">
                         <div className="flex flex-wrap gap-2">
-                          {user.groups?.length
-                            ? user.groups.map((g) => (
-                                <RoleBadge key={g.id} role={g.name} />
-                              ))
-                            : "-"}
+                          {user.groups?.length ? user.groups.map((g) => <RoleBadge key={g.id} role={g.name} />) : "-"}
                         </div>
                       </td>
 
                       <td className="px-4">
                         {(user as any).createdAt
-                          ? new Date(
-                              (user as any).createdAt,
-                            ).toLocaleDateString("en-US", {
+                          ? new Date((user as any).createdAt).toLocaleDateString("en-US", {
                               month: "long",
                               day: "numeric",
                               year: "numeric",
@@ -612,19 +571,11 @@ export default function UserPage() {
                         <div className="flex items-center justify-center gap-4">
                           {canEdit && (
                             <>
-                              <button
-                                onClick={() => openEdit(user)}
-                                className="text-[#193153] hover:text-blue-600"
-                                title="Edit"
-                              >
+                              <button onClick={() => openEdit(user)} className="text-[#193153] hover:text-blue-600" title="Edit">
                                 ✎
                               </button>
 
-                              <button
-                                onClick={() => setDeleteConfirm(user)}
-                                className="text-red-400 hover:text-red-600"
-                                title="Delete"
-                              >
+                              <button onClick={() => setDeleteConfirm(user)} className="text-red-400 hover:text-red-600" title="Delete">
                                 ♲
                               </button>
                             </>
@@ -641,7 +592,7 @@ export default function UserPage() {
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4 text-sm">
           <div className="flex items-center gap-3">
-            <span className="font-bold">Rows per page</span>
+            <span className="font-bold">{t("rowsPerPage")}</span>
 
             <select
               value={take}
@@ -658,24 +609,16 @@ export default function UserPage() {
             </select>
 
             <span>
-              {fromRow}-{toRow} of <b>{total}</b> rows
+              {fromRow}-{toRow} {t("of")} <b>{total}</b> {t("rows")}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(1)}
-              disabled={page === 1}
-              className="rounded-full border px-3 py-1 disabled:opacity-40"
-            >
+            <button onClick={() => setPage(1)} disabled={page === 1} className="rounded-full border px-3 py-1 disabled:opacity-40">
               «
             </button>
 
-            <button
-              onClick={() => setPage((p) => p - 1)}
-              disabled={page === 1}
-              className="rounded-full border px-3 py-1 disabled:opacity-40"
-            >
+            <button onClick={() => setPage((p) => p - 1)} disabled={page === 1} className="rounded-full border px-3 py-1 disabled:opacity-40">
               ‹
             </button>
 
@@ -683,40 +626,25 @@ export default function UserPage() {
               {page} / {totalPages}
             </span>
 
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page === totalPages}
-              className="rounded-full border px-3 py-1 disabled:opacity-40"
-            >
+            <button onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} className="rounded-full border px-3 py-1 disabled:opacity-40">
               ›
             </button>
 
-            <button
-              onClick={() => setPage(totalPages)}
-              disabled={page === totalPages}
-              className="rounded-full border px-3 py-1 disabled:opacity-40"
-            >
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded-full border px-3 py-1 disabled:opacity-40">
               »
             </button>
           </div>
         </div>
       </div>
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Edit User"
-      >
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={t("editUser")}>
         <div className="space-y-4">
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+
           <div>
             <input
               className={`${inputCls} ${formErrors.email ? errorInputCls : ""}`}
-              placeholder="Email"
+              placeholder={t("emailPlaceholder")}
               type="email"
               value={form.email}
               onChange={(e) => {
@@ -724,39 +652,33 @@ export default function UserPage() {
                 setFormErrors({ ...formErrors, email: undefined });
               }}
             />
-            {formErrors.email && (
-              <p className={fieldErrorCls}>{formErrors.email}</p>
-            )}
+            {formErrors.email && <p className={fieldErrorCls}>{formErrors.email}</p>}
           </div>
 
           <div>
             <input
               className={`${inputCls} ${formErrors.fullname ? errorInputCls : ""}`}
-              placeholder="Full name"
+              placeholder={t("fullnamePlaceholder")}
               value={form.fullname}
               onChange={(e) => {
                 setForm({ ...form, fullname: e.target.value });
                 setFormErrors({ ...formErrors, fullname: undefined });
               }}
             />
-            {formErrors.fullname && (
-              <p className={fieldErrorCls}>{formErrors.fullname}</p>
-            )}
+            {formErrors.fullname && <p className={fieldErrorCls}>{formErrors.fullname}</p>}
           </div>
 
           <div>
             <input
               className={`${inputCls} ${formErrors.phoneNumber ? errorInputCls : ""}`}
-              placeholder="Phone number"
+              placeholder={t("phonePlaceholder")}
               value={form.phoneNumber}
               onChange={(e) => {
                 setForm({ ...form, phoneNumber: e.target.value });
                 setFormErrors({ ...formErrors, phoneNumber: undefined });
               }}
             />
-            {formErrors.phoneNumber && (
-              <p className={fieldErrorCls}>{formErrors.phoneNumber}</p>
-            )}
+            {formErrors.phoneNumber && <p className={fieldErrorCls}>{formErrors.phoneNumber}</p>}
           </div>
 
           <div>
@@ -768,13 +690,11 @@ export default function UserPage() {
                 setFormErrors({ ...formErrors, status: undefined });
               }}
             >
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="LOCKED">Banned</option>
+              <option value="ACTIVE">{t("active")}</option>
+              <option value="INACTIVE">{t("inactive")}</option>
+              <option value="LOCKED">{t("banned")}</option>
             </select>
-            {formErrors.status && (
-              <p className={fieldErrorCls}>{formErrors.status}</p>
-            )}
+            {formErrors.status && <p className={fieldErrorCls}>{formErrors.status}</p>}
           </div>
 
           <div>
@@ -789,59 +709,43 @@ export default function UserPage() {
                 setFormErrors({ ...formErrors, groupId: undefined });
               }}
             >
-              <option value="">Select role</option>
+              <option value="">{t("selectRole")}</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
-            {formErrors.groupId && (
-              <p className={fieldErrorCls}>{formErrors.groupId}</p>
-            )}
+            {formErrors.groupId && <p className={fieldErrorCls}>{formErrors.groupId}</p>}
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="h-12 w-full rounded-xl bg-[#193153] text-sm font-bold text-white disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Changes"}
+          <button onClick={handleSave} disabled={saving} className="h-12 w-full rounded-xl bg-[#193153] text-sm font-bold text-white disabled:opacity-50">
+            {saving ? t("saving") : t("save")}
           </button>
         </div>
       </Modal>
 
-      <Modal
-        open={registerModalOpen}
-        onClose={() => setRegisterModalOpen(false)}
-        title="Add User"
-      >
+      <Modal open={registerModalOpen} onClose={() => setRegisterModalOpen(false)} title={t("addUserModal")}>
         <div className="space-y-4">
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
 
           <div>
             <input
               className={`${inputCls} ${formErrors.email ? errorInputCls : ""}`}
-              placeholder="Email"
+              placeholder={t("emailPlaceholder")}
               value={regForm.email}
               onChange={(e) => {
                 setRegForm({ ...regForm, email: e.target.value });
                 setFormErrors({ ...formErrors, email: undefined });
               }}
             />
-            {formErrors.email && (
-              <p className={fieldErrorCls}>{formErrors.email}</p>
-            )}
+            {formErrors.email && <p className={fieldErrorCls}>{formErrors.email}</p>}
           </div>
 
           <div>
             <input
               className={`${inputCls} ${formErrors.password ? errorInputCls : ""}`}
-              placeholder="Password"
+              placeholder={t("passwordPlaceholder")}
               type="password"
               value={regForm.password}
               onChange={(e) => {
@@ -849,39 +753,33 @@ export default function UserPage() {
                 setFormErrors({ ...formErrors, password: undefined });
               }}
             />
-            {formErrors.password && (
-              <p className={fieldErrorCls}>{formErrors.password}</p>
-            )}
+            {formErrors.password && <p className={fieldErrorCls}>{formErrors.password}</p>}
           </div>
 
           <div>
             <input
               className={`${inputCls} ${formErrors.fullname ? errorInputCls : ""}`}
-              placeholder="Full name"
+              placeholder={t("fullnamePlaceholder")}
               value={regForm.fullname}
               onChange={(e) => {
                 setRegForm({ ...regForm, fullname: e.target.value });
                 setFormErrors({ ...formErrors, fullname: undefined });
               }}
             />
-            {formErrors.fullname && (
-              <p className={fieldErrorCls}>{formErrors.fullname}</p>
-            )}
+            {formErrors.fullname && <p className={fieldErrorCls}>{formErrors.fullname}</p>}
           </div>
 
           <div>
             <input
               className={`${inputCls} ${formErrors.phoneNumber ? errorInputCls : ""}`}
-              placeholder="Phone number"
+              placeholder={t("phonePlaceholder")}
               value={regForm.phoneNumber}
               onChange={(e) => {
                 setRegForm({ ...regForm, phoneNumber: e.target.value });
                 setFormErrors({ ...formErrors, phoneNumber: undefined });
               }}
             />
-            {formErrors.phoneNumber && (
-              <p className={fieldErrorCls}>{formErrors.phoneNumber}</p>
-            )}
+            {formErrors.phoneNumber && <p className={fieldErrorCls}>{formErrors.phoneNumber}</p>}
           </div>
 
           <div>
@@ -893,52 +791,34 @@ export default function UserPage() {
                 setFormErrors({ ...formErrors, groupId: undefined });
               }}
             >
-              <option value="">Select role</option>
+              <option value="">{t("selectRole")}</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
-            {formErrors.groupId && (
-              <p className={fieldErrorCls}>{formErrors.groupId}</p>
-            )}
+            {formErrors.groupId && <p className={fieldErrorCls}>{formErrors.groupId}</p>}
           </div>
 
-          <button
-            onClick={handleRegister}
-            disabled={saving}
-            className="h-12 w-full rounded-xl bg-[#193153] text-sm font-bold text-white disabled:opacity-50"
-          >
-            {saving ? "Creating..." : "Create User"}
+          <button onClick={handleRegister} disabled={saving} className="h-12 w-full rounded-xl bg-[#193153] text-sm font-bold text-white disabled:opacity-50">
+            {saving ? t("creating") : t("create")}
           </button>
         </div>
       </Modal>
 
-      <Modal
-        open={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="Delete User"
-      >
+      <Modal open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title={t("deleteUser")}>
         <p className="mb-5 text-sm text-slate-500">
-          Are you sure you want to delete{" "}
-          <b>{deleteConfirm?.fullname || deleteConfirm?.email}</b>?
+          {t("deleteConfirm")} <b>{deleteConfirm?.fullname || deleteConfirm?.email}</b>?
         </p>
 
         <div className="flex justify-end gap-3">
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-bold"
-          >
-            Cancel
+          <button onClick={() => setDeleteConfirm(null)} className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-bold">
+            {t("cancel")}
           </button>
 
-          <button
-            onClick={handleDelete}
-            disabled={saving}
-            className="h-10 rounded-xl bg-red-500 px-4 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {saving ? "Deleting..." : "Delete"}
+          <button onClick={handleDelete} disabled={saving} className="h-10 rounded-xl bg-red-500 px-4 text-sm font-bold text-white disabled:opacity-50">
+            {saving ? t("deleting") : t("delete")}
           </button>
         </div>
       </Modal>

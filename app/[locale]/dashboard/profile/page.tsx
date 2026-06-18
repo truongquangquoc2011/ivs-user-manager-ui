@@ -1,12 +1,23 @@
 "use client";
+
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import { profileApi } from "@/src/lib/api";
 import { useAuth } from "@/src/hook/useAuth";
 
-const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "Hoạt động",
-  INACTIVE: "Chưa kích hoạt",
-  LOCKED: "Bị khóa",
+const STATUS_CONFIG: Record<string, { labelKey: string; className: string }> = {
+  ACTIVE: {
+    labelKey: "status.active",
+    className: "bg-emerald-50 text-emerald-600",
+  },
+  INACTIVE: {
+    labelKey: "status.inactive",
+    className: "bg-slate-100 text-slate-500",
+  },
+  LOCKED: {
+    labelKey: "status.locked",
+    className: "bg-red-50 text-red-600",
+  },
 };
 
 type FormErrors = {
@@ -20,7 +31,43 @@ type PwErrors = {
   confirm?: string;
 };
 
+type ToastType = "success" | "error" | "warning";
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: ToastType;
+  message: string;
+  onClose: () => void;
+}) {
+  const bg =
+    type === "success"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : type === "warning"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200";
+
+  return (
+    <div
+      className={`fixed right-6 top-6 z-[9999] min-w-[280px] rounded-xl border px-4 py-3 shadow-lg ${bg}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm font-medium">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-sm opacity-70 hover:opacity-100"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
+  const t = useTranslations("profilePage");
   const { profile, loading, reload } = useAuth();
 
   const [editing, setEditing] = useState(false);
@@ -46,22 +93,30 @@ export default function ProfilePage() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwSuccess, setPwSuccess] = useState(false);
 
+  const [toast, setToast] = useState<{
+    type: ToastType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const validateProfile = () => {
     const errors: FormErrors = {};
     const fullname = form.fullname.trim();
     const phoneNumber = form.phoneNumber.trim();
 
-    if (!fullname) errors.fullname = "Vui lòng nhập họ tên";
-    else if (fullname.length < 2)
-      errors.fullname = "Họ tên phải có ít nhất 2 ký tự";
-    else if (fullname.length > 60)
-      errors.fullname = "Họ tên không được vượt quá 60 ký tự";
+    if (!fullname) errors.fullname = t("errors.fullnameEmpty");
+    else if (fullname.length < 2) errors.fullname = t("errors.fullnameShort");
+    else if (fullname.length > 60) errors.fullname = t("errors.fullnameLong");
     else if (!/^[a-zA-ZÀ-ỹ\s]+$/.test(fullname)) {
-      errors.fullname = "Họ tên không được chứa số hoặc ký tự đặc biệt";
+      errors.fullname = t("errors.fullnameInvalid");
     }
 
     if (phoneNumber && !/^0\d{9}$/.test(phoneNumber)) {
-      errors.phoneNumber = "Số điện thoại phải gồm 10 số và bắt đầu bằng 0";
+      errors.phoneNumber = t("errors.phoneInvalid");
     }
 
     setFormErrors(errors);
@@ -72,23 +127,25 @@ export default function ProfilePage() {
     const errors: PwErrors = {};
     const { oldPassword, newPassword, confirm } = pwForm;
 
-    if (!oldPassword.trim())
-      errors.oldPassword = "Vui lòng nhập mật khẩu hiện tại";
-
-    if (!newPassword.trim()) errors.newPassword = "Vui lòng nhập mật khẩu mới";
-    else if (!/[A-Z]/.test(newPassword))
-      errors.newPassword = "Mật khẩu mới phải có ít nhất 1 chữ hoa";
-    else if (!/[a-z]/.test(newPassword))
-      errors.newPassword = "Mật khẩu mới phải có ít nhất 1 chữ thường";
-    else if (!/\d/.test(newPassword))
-      errors.newPassword = "Mật khẩu mới phải có ít nhất 1 số";
-    else if (oldPassword && oldPassword === newPassword) {
-      errors.newPassword = "Mật khẩu mới không được trùng mật khẩu hiện tại";
+    if (!oldPassword.trim()) {
+      errors.oldPassword = t("errors.oldPasswordEmpty");
     }
 
-    if (!confirm.trim()) errors.confirm = "Vui lòng xác nhận mật khẩu mới";
-    else if (newPassword !== confirm)
-      errors.confirm = "Mật khẩu xác nhận không khớp";
+    if (!newPassword.trim()) errors.newPassword = t("errors.newPasswordEmpty");
+    else if (!/[A-Z]/.test(newPassword)) {
+      errors.newPassword = t("errors.passwordUppercase");
+    } else if (!/[a-z]/.test(newPassword)) {
+      errors.newPassword = t("errors.passwordLowercase");
+    } else if (!/\d/.test(newPassword)) {
+      errors.newPassword = t("errors.passwordNumber");
+    } else if (oldPassword && oldPassword === newPassword) {
+      errors.newPassword = t("errors.passwordSame");
+    }
+
+    if (!confirm.trim()) errors.confirm = t("errors.confirmEmpty");
+    else if (newPassword !== confirm) {
+      errors.confirm = t("errors.confirmNotMatch");
+    }
 
     setPwErrors(errors);
     return Object.keys(errors).length === 0;
@@ -96,11 +153,13 @@ export default function ProfilePage() {
 
   const openEdit = () => {
     if (!profile) return;
+
     setForm({
       fullname: profile.fullname || "",
       phoneNumber: profile.phoneNumber || "",
       avatar: profile.avatar || "",
     });
+
     setFormErrors({});
     setEditError("");
     setEditing(true);
@@ -117,14 +176,19 @@ export default function ProfilePage() {
         phoneNumber: form.phoneNumber.trim(),
         avatar: form.avatar,
       });
-      reload();
+
+      await reload();
       setEditing(false);
+      showToast("success", t("messages.updateSuccess"));
     } catch (e: any) {
-      setEditError(e.message || "Cập nhật hồ sơ thất bại");
+      const message = e.message || t("messages.updateFailed");
+      setEditError(message);
+      showToast("error", message);
     } finally {
       setSaving(false);
     }
   };
+
   const handleUploadAvatar = async (file?: File) => {
     if (!file) return;
 
@@ -133,12 +197,16 @@ export default function ProfilePage() {
         file.type,
       )
     ) {
-      setEditError("Chỉ cho phép ảnh JPG, JPEG, PNG hoặc WEBP");
+      const message = t("messages.avatarTypeInvalid");
+      setEditError(message);
+      showToast("error", message);
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setEditError("Ảnh không được vượt quá 5MB");
+      const message = t("messages.avatarSizeInvalid");
+      setEditError(message);
+      showToast("error", message);
       return;
     }
 
@@ -151,12 +219,16 @@ export default function ProfilePage() {
 
       setForm((f) => ({ ...f, avatar: avatarUrl }));
       await reload();
+      showToast("success", t("messages.avatarSuccess"));
     } catch (e: any) {
-      setEditError(e.message || "Upload avatar thất bại");
+      const message = e.message || t("messages.avatarUploadFailed");
+      setEditError(message);
+      showToast("error", message);
     } finally {
       setUploadingAvatar(false);
     }
   };
+
   const handleChangePassword = async () => {
     setPwError("");
     if (!validatePassword()) return;
@@ -172,43 +244,51 @@ export default function ProfilePage() {
       setPwSuccess(true);
       setPwForm({ oldPassword: "", newPassword: "", confirm: "" });
       setPwErrors({});
+      showToast("success", t("messages.changePasswordSuccess"));
 
       setTimeout(() => {
         setPwSuccess(false);
         setPwModal(false);
       }, 1500);
     } catch (e: any) {
-      setPwError(e.message || "Đổi mật khẩu thất bại");
+      const message = e.message || t("messages.changePasswordFailed");
+      setPwError(message);
+      showToast("error", message);
     } finally {
       setPwSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-sm text-slate-400">Đang tải...</div>;
+    return <div className="p-8 text-sm text-slate-400">{t("loading")}</div>;
   }
 
   if (!profile) {
-    return (
-      <div className="p-8 text-sm text-red-500">
-        Không thể tải thông tin hồ sơ.
-      </div>
-    );
+    return <div className="p-8 text-sm text-red-500">{t("loadFailed")}</div>;
   }
 
   const initials = (profile.fullname || profile.email).charAt(0).toUpperCase();
+  const statusConfig = STATUS_CONFIG[profile.status];
 
   const inputBase =
-  "flex h-12 w-full items-center rounded-xl border border-slate-100 bg-[#f8f8f8] px-5 text-sm text-slate-800 outline-none transition focus:bg-white focus:ring-2 focus:ring-blue-500/20";
+    "flex h-12 w-full items-center rounded-xl border border-slate-100 bg-[#f8f8f8] px-5 text-sm text-slate-800 outline-none transition focus:bg-white focus:ring-2 focus:ring-blue-500/20";
+
   const labelBase = "mb-2 block text-[13px] font-medium text-slate-700";
   const errorBase = "mt-1.5 text-xs text-red-500";
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-white">
-  <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white">
+    <div className="w-full bg-white">
+      {" "}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+      <div className="w-full flex flex-col bg-white">
         <div className="h-[74px] bg-gradient-to-r from-[#b9d6f3] via-[#f3efe9] to-[#fff8dc]" />
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 pt-6">
+        <div className="px-8 pb-10 pt-6">
           <div className="mb-8 flex items-center justify-between gap-4">
             <div className="flex items-center gap-5">
               <div className="relative">
@@ -216,7 +296,7 @@ export default function ProfilePage() {
                   {profile.avatar ? (
                     <img
                       src={profile.avatar}
-                      alt="Avatar"
+                      alt={t("avatarAlt")}
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -226,7 +306,7 @@ export default function ProfilePage() {
 
                 {editing && (
                   <label className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-xs text-white shadow-md">
-                    {uploadingAvatar ? "..." : "✎"}
+                    {uploadingAvatar ? t("uploading") : "✎"}
                     <input
                       type="file"
                       accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -239,8 +319,9 @@ export default function ProfilePage() {
 
               <div>
                 <h1 className="text-[17px] font-semibold text-slate-950">
-                  {profile.fullname || "—"}
+                  {profile.fullname || t("empty")}
                 </h1>
+
                 <p className="mt-1 text-sm text-slate-400">{profile.email}</p>
 
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -254,13 +335,9 @@ export default function ProfilePage() {
                   ))}
 
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      profile.status === "ACTIVE"
-                        ? "bg-emerald-50 text-emerald-600"
-                        : "bg-slate-100 text-slate-500"
-                    }`}
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${statusConfig?.className ?? "bg-slate-100 text-slate-500"}`}
                   >
-                    {STATUS_LABEL[profile.status] || profile.status}
+                    {statusConfig ? t(statusConfig.labelKey) : profile.status}
                   </span>
                 </div>
               </div>
@@ -271,7 +348,7 @@ export default function ProfilePage() {
                 onClick={openEdit}
                 className="rounded-md bg-blue-500 px-7 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-600"
               >
-                Edit
+                {t("buttons.edit")}
               </button>
             )}
           </div>
@@ -282,7 +359,7 @@ export default function ProfilePage() {
 
               <div className="grid grid-cols-1 gap-x-7 gap-y-5 md:grid-cols-2">
                 <div>
-                  <label className={labelBase}>Full Name</label>
+                  <label className={labelBase}>{t("fields.fullname")}</label>
                   <input
                     className={`${inputBase} ${formErrors.fullname ? "ring-2 ring-red-500/20" : ""}`}
                     value={form.fullname}
@@ -290,7 +367,7 @@ export default function ProfilePage() {
                       setForm((f) => ({ ...f, fullname: e.target.value }));
                       setFormErrors((err) => ({ ...err, fullname: undefined }));
                     }}
-                    placeholder="Your Full Name"
+                    placeholder={t("placeholders.fullname")}
                   />
                   {formErrors.fullname && (
                     <p className={errorBase}>{formErrors.fullname}</p>
@@ -298,7 +375,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <label className={labelBase}>Phone Number</label>
+                  <label className={labelBase}>{t("fields.phoneNumber")}</label>
                   <input
                     className={`${inputBase} ${formErrors.phoneNumber ? "ring-2 ring-red-500/20" : ""}`}
                     value={form.phoneNumber}
@@ -309,7 +386,7 @@ export default function ProfilePage() {
                         phoneNumber: undefined,
                       }));
                     }}
-                    placeholder="Your Phone Number"
+                    placeholder={t("placeholders.phoneNumber")}
                     maxLength={10}
                   />
                   {formErrors.phoneNumber && (
@@ -327,7 +404,7 @@ export default function ProfilePage() {
                   }}
                   className="rounded-md bg-slate-100 px-7 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
                 >
-                  Hủy
+                  {t("buttons.cancel")}
                 </button>
 
                 <button
@@ -335,29 +412,33 @@ export default function ProfilePage() {
                   disabled={saving}
                   className="rounded-md bg-blue-500 px-7 py-2.5 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
                 >
-                  {saving ? "Đang lưu..." : "Lưu"}
+                  {saving ? t("buttons.saving") : t("buttons.save")}
                 </button>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-x-7 gap-y-5 md:grid-cols-2">
               <div>
-                <label className={labelBase}>Email</label>
+                <label className={labelBase}>{t("fields.email")}</label>
                 <div className={inputBase}>{profile.email}</div>
               </div>
 
               <div>
-                <label className={labelBase}>Full Name</label>
-                <div className={inputBase}>{profile.fullname || "—"}</div>
+                <label className={labelBase}>{t("fields.fullname")}</label>
+                <div className={inputBase}>
+                  {profile.fullname || t("empty")}
+                </div>
               </div>
 
               <div>
-                <label className={labelBase}>Phone Number</label>
-                <div className={inputBase}>{profile.phoneNumber || "—"}</div>
+                <label className={labelBase}>{t("fields.phoneNumber")}</label>
+                <div className={inputBase}>
+                  {profile.phoneNumber || t("empty")}
+                </div>
               </div>
 
               <div>
-                <label className={labelBase}>User ID</label>
+                <label className={labelBase}>{t("fields.userId")}</label>
                 <div className={inputBase}>#{profile.id}</div>
               </div>
             </div>
@@ -365,14 +446,13 @@ export default function ProfilePage() {
 
           <div className="mt-7">
             <h2 className="mb-4 text-[15px] font-semibold text-slate-950">
-              My email Address
+              {t("emailSectionTitle")}
             </h2>
 
             <div className="flex items-center gap-4">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-500">
                 ✉
               </div>
-
               <div>
                 <p className="text-sm font-medium text-slate-800">
                   {profile.email}
@@ -384,7 +464,7 @@ export default function ProfilePage() {
           {profile.permissions.length > 0 && (
             <div className="mt-8">
               <h2 className="mb-4 text-[15px] font-semibold text-slate-950">
-                Quyền truy cập
+                {t("permissionsTitle")}
               </h2>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -400,19 +480,19 @@ export default function ProfilePage() {
                     <div className="flex gap-2">
                       {perm.canView && (
                         <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-600">
-                          Xem
+                          {t("permissions.view")}
                         </span>
                       )}
 
                       {perm.canEdit && (
                         <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-600">
-                          Sửa
+                          {t("permissions.edit")}
                         </span>
                       )}
 
                       {!perm.canView && !perm.canEdit && (
                         <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-400">
-                          Không có
+                          {t("permissions.none")}
                         </span>
                       )}
                     </div>
@@ -431,17 +511,16 @@ export default function ProfilePage() {
             }}
             className="mt-7 rounded-md bg-blue-50 px-5 py-2.5 text-sm font-medium text-blue-500 transition hover:bg-blue-100"
           >
-            Đổi mật khẩu
+            {t("changePasswordTitle")}
           </button>
         </div>
       </div>
-
       {pwModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-950">
-                Đổi mật khẩu
+                {t("changePasswordTitle")}
               </h3>
 
               <button
@@ -460,7 +539,7 @@ export default function ProfilePage() {
             {pwSuccess ? (
               <div className="py-6 text-center">
                 <p className="text-sm font-medium text-emerald-600">
-                  ✓ Đổi mật khẩu thành công!
+                  {t("messages.changePasswordSuccess")}
                 </p>
               </div>
             ) : (
@@ -468,20 +547,16 @@ export default function ProfilePage() {
                 {pwError && <p className="text-xs text-red-500">{pwError}</p>}
 
                 {[
-                  { label: "Mật khẩu hiện tại", key: "oldPassword" },
-                  { label: "Mật khẩu mới", key: "newPassword" },
-                  { label: "Xác nhận mật khẩu mới", key: "confirm" },
+                  { label: t("fields.oldPassword"), key: "oldPassword" },
+                  { label: t("fields.newPassword"), key: "newPassword" },
+                  { label: t("fields.confirmPassword"), key: "confirm" },
                 ].map(({ label, key }) => (
                   <div key={key}>
                     <label className={labelBase}>{label}</label>
 
                     <input
                       type="password"
-                      className={`${inputBase} ${
-                        pwErrors[key as keyof PwErrors]
-                          ? "ring-2 ring-red-500/20"
-                          : ""
-                      }`}
+                      className={`${inputBase} ${pwErrors[key as keyof PwErrors] ? "ring-2 ring-red-500/20" : ""}`}
                       value={pwForm[key as keyof typeof pwForm]}
                       onChange={(e) => {
                         setPwForm((f) => ({ ...f, [key]: e.target.value }));
@@ -511,7 +586,7 @@ export default function ProfilePage() {
                     }}
                     className="flex-1 rounded-md bg-slate-100 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-200"
                   >
-                    Hủy
+                    {t("buttons.cancel")}
                   </button>
 
                   <button
@@ -519,7 +594,7 @@ export default function ProfilePage() {
                     disabled={pwSaving}
                     className="flex-1 rounded-md bg-blue-500 py-2.5 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
                   >
-                    {pwSaving ? "Đang lưu..." : "Xác nhận"}
+                    {pwSaving ? t("buttons.saving") : t("buttons.confirm")}
                   </button>
                 </div>
               </div>

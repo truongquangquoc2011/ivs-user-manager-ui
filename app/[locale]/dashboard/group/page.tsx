@@ -1,5 +1,7 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { groupApi, userApi, safeCall } from "@/src/lib/api";
 import { GroupResponse, GroupUserResponse, UserResponse } from "@/src/types";
 import { useAuth } from "@/src/hook/useAuth";
@@ -9,6 +11,101 @@ type FormErrors = Partial<{
   description: string;
   addUserId: string;
 }>;
+
+type ToastType = "success" | "error" | "warning";
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: ToastType;
+  message: string;
+  onClose: () => void;
+}) {
+  const bg =
+    type === "success"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : type === "warning"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200";
+
+  return (
+    <div
+      className={`fixed right-6 top-6 z-[9999] min-w-[280px] rounded-xl border px-4 py-3 shadow-lg ${bg}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm font-medium">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-sm opacity-70 hover:opacity-100"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmPopup({
+  open,
+  title,
+  message,
+  cancelText,
+  confirmText,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  cancelText: string;
+  confirmText: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[9998] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl p-6 shadow-xl"
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <h3 className="mb-2 text-base font-semibold">{title}</h3>
+        <p className="mb-6 text-sm" style={{ color: "var(--text-secondary)" }}>
+          {message}
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 cursor-pointer rounded-xl py-2.5 text-sm"
+            style={{
+              border: "1px solid var(--border)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {cancelText}
+          </button>
+
+          <button
+            onClick={onConfirm}
+            className="flex-1 cursor-pointer rounded-xl bg-red-600 py-2.5 text-sm font-medium text-white"
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Modal({
   open,
@@ -22,6 +119,7 @@ function Modal({
   children: React.ReactNode;
 }) {
   if (!open) return null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -44,6 +142,7 @@ function Modal({
             ✕
           </button>
         </div>
+
         {children}
       </div>
     </div>
@@ -51,6 +150,7 @@ function Modal({
 }
 
 export default function GroupPage() {
+  const t = useTranslations("groupMgmt");
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("GROUP_MANAGEMENT", "canEdit");
 
@@ -78,20 +178,36 @@ export default function GroupPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [toast, setToast] = useState<{
+    type: ToastType;
+    message: string;
+  } | null>(null);
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    groupId?: number;
+  }>({
+    open: false,
+  });
+
+  const showToast = (type: ToastType, message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 2500);
+  };
 
   const validateGroupForm = () => {
     const errors: FormErrors = {};
 
     if (!groupForm.name.trim()) {
-      errors.name = "Tên nhóm không được để trống";
+      errors.name = t("nameRequired");
     } else if (groupForm.name.trim().length < 2) {
-      errors.name = "Tên nhóm phải có ít nhất 2 ký tự";
+      errors.name = t("nameMin");
     } else if (groupForm.name.trim().length > 50) {
-      errors.name = "Tên nhóm không được vượt quá 50 ký tự";
+      errors.name = t("nameMax");
     }
 
     if (groupForm.description.trim().length > 255) {
-      errors.description = "Mô tả không được vượt quá 255 ký tự";
+      errors.description = t("descMax");
     }
 
     setFormErrors(errors);
@@ -102,7 +218,7 @@ export default function GroupPage() {
     const errors: FormErrors = {};
 
     if (!addUserId) {
-      errors.addUserId = "Vui lòng chọn người dùng";
+      errors.addUserId = t("selectUserRequired");
     }
 
     setFormErrors(errors);
@@ -111,6 +227,7 @@ export default function GroupPage() {
 
   const load = async () => {
     setLoading(true);
+
     const [groups, allUsersRes] = await Promise.all([
       safeCall(() => groupApi.getAll(), []),
       safeCall(() => userApi.getAll({ skip: 0, take: 100 }), {
@@ -125,11 +242,13 @@ export default function GroupPage() {
     setAllUsers(allUsersRes.items);
 
     const usersMap: Record<number, GroupUserResponse[]> = {};
+
     await Promise.all(
       groups.map(async (g) => {
         usersMap[g.id] = await safeCall(() => groupApi.getUsers(g.id), []);
       }),
     );
+
     setGroupUsers(usersMap);
     setLoading(false);
   };
@@ -179,21 +298,31 @@ export default function GroupPage() {
 
       setGroupModal(false);
       setFormErrors({});
+      showToast("success", t("saveSuccess"));
       load();
     } catch (e: any) {
       setError(e.message);
+      showToast("error", e.message || t("connectError"));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteGroup = async (id: number) => {
-    if (!confirm("Xóa nhóm này?")) return;
+  const askDeleteGroup = (id: number) => {
+    setConfirmState({ open: true, groupId: id });
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!confirmState.groupId) return;
+
     try {
-      await groupApi.delete(id);
+      await groupApi.delete(confirmState.groupId);
+      setConfirmState({ open: false });
+      showToast("success", t("deleteSuccess"));
       load();
     } catch (e: any) {
-      alert(e.message);
+      setConfirmState({ open: false });
+      showToast("error", e.message || t("connectError"));
     }
   };
 
@@ -214,18 +343,21 @@ export default function GroupPage() {
 
     try {
       await groupApi.addUser(selectedGroup.id, Number(addUserId));
+
       const r = await groupApi.getUsers(selectedGroup.id);
       setGroupUsers((prev) => ({ ...prev, [selectedGroup.id]: r.data }));
+
       setAddUserId("");
       setFormErrors({});
+      showToast("success", t("addUserSuccess"));
       await load();
     } catch (e: any) {
       if (e.message?.includes("Duplicate entry")) {
-        setError(
-          "Người dùng này đã thuộc một nhóm khác, không thể thêm trùng.",
-        );
+        setError(t("duplicateUser"));
+        showToast("error", t("duplicateUser"));
       } else {
         setError(e.message);
+        showToast("error", e.message || t("connectError"));
       }
     } finally {
       setSaving(false);
@@ -234,22 +366,28 @@ export default function GroupPage() {
 
   const handleRemoveUser = async (userId: number) => {
     if (!selectedGroup) return;
+
     try {
       await groupApi.removeUser(selectedGroup.id, userId);
+
       const r = await groupApi.getUsers(selectedGroup.id);
       setGroupUsers((prev) => ({ ...prev, [selectedGroup.id]: r.data }));
+
+      showToast("success", t("removeUserSuccess"));
       await load();
     } catch (e: any) {
-      alert(e.message);
+      showToast("error", e.message || t("connectError"));
     }
   };
 
   const inputCls = "w-full rounded-lg px-3 py-2.5 text-sm outline-none";
+
   const inputStyle = {
     background: "var(--bg)",
     border: "1px solid var(--border)",
     color: "var(--text-primary)",
   };
+
   const errorInputStyle = {
     background: "rgba(239, 68, 68, 0.06)",
     border: "1px solid rgba(239, 68, 68, 0.45)",
@@ -266,21 +404,41 @@ export default function GroupPage() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-50 p-8">
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <ConfirmPopup
+        open={confirmState.open}
+        title={t("delete")}
+        message={t("deleteConfirm")}
+        cancelText={t("cancel")}
+        confirmText={t("delete")}
+        onCancel={() => setConfirmState({ open: false })}
+        onConfirm={handleDeleteGroup}
+      />
+
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="mb-7 flex items-end justify-between">
           <div>
-            <h1 className="mb-1 text-xl font-semibold">Quản lý nhóm</h1>
+            <h1 className="mb-1 text-xl font-semibold">{t("title")}</h1>
+
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              {groups.length} nhóm trong hệ thống
+              {t("subtitleCount", { count: groups.length })}
             </p>
           </div>
+
           {canEdit && (
             <button
               onClick={openCreate}
               className="flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium"
               style={{ background: "var(--bg-sidebar)", color: "#f0efe8" }}
             >
-              <span>+</span> Tạo nhóm
+              <span>+</span> {t("create")}
             </button>
           )}
         </div>
@@ -290,158 +448,137 @@ export default function GroupPage() {
             className="py-16 text-center text-sm"
             style={{ color: "var(--text-muted)" }}
           >
-            Đang tải...
+            {t("loading")}
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {groups.map((group) => {
                 const members = groupUsers[group.id] ?? [];
 
                 return (
                   <div
                     key={group.id}
-                    className="
-    overflow-hidden
-    rounded-2xl
-    border
-    border-slate-200
-    bg-white
-    shadow-sm
-    hover:shadow-md
-    transition-shadow
-  "
+                    className="flex h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
                   >
-                    <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-sm font-bold text-slate-900">
-                          {group.name}
-                        </h3>
+                    {/* HEADER */}
+                    <div className="border-b bg-slate-50 px-5 py-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-xl">
+                            👥
+                          </div>
+
+                          <div>
+                            <h3 className="font-bold text-slate-900">
+                              {group.name}
+                            </h3>
+
+                            <p className="text-xs text-slate-500">
+                              {members.length} thành viên
+                            </p>
+
+                            {group.description && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {group.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
                         <span
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                          className={`rounded-full border px-2 py-1 text-xs font-medium ${
                             group.isActive
                               ? "border-emerald-300 bg-emerald-50 text-emerald-600"
                               : "border-slate-300 bg-slate-100 text-slate-500"
                           }`}
                         >
-                          {group.isActive ? "Active" : "Inactive"}
+                          {group.isActive ? t("active") : t("inactive")}
                         </span>
-
-                        {group.description && (
-                          <span className="text-xs text-slate-400">
-                            {group.description}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {canEdit && (
-                          <>
-                            <button
-                              onClick={() => openEdit(group)}
-                              className="text-xs font-medium text-[#193153] hover:underline"
-                            >
-                              Sửa
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteGroup(group.id)}
-                              className="text-xs font-medium text-red-500 hover:underline"
-                            >
-                              Xóa
-                            </button>
-                          </>
-                        )}
-
                       </div>
                     </div>
 
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-white text-xs text-slate-900">
-                          <th className="px-5 py-3 font-bold">Name</th>
-                          <th className="px-5 py-3 font-bold">Level</th>
-                          <th className="px-5 py-3 font-bold">Email</th>
-                          <th className="px-5 py-3 text-right font-bold">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {members.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="px-5 py-6 text-center text-xs text-slate-400"
-                            >
-                              Chưa có thành viên
-                            </td>
-                          </tr>
-                        ) : (
-                          members.map((m) => (
-                            <tr
-                              key={m.id}
-                              className="border-b border-slate-50 even:bg-slate-50/70"
-                            >
-                              <td className="px-5 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eef8] text-xs font-bold text-[#193153]">
-                                    {(m.fullname || m.email)
-                                      .charAt(0)
-                                      .toUpperCase()}
-                                  </div>
-
-                                  <span className="font-medium text-slate-900">
-                                    {m.fullname || "—"}
-                                  </span>
-                                </div>
-                              </td>
-
-                              <td className="px-5 py-3 text-slate-700">
-                                {group.name}
-                              </td>
-
-                              <td className="px-5 py-3 text-slate-500">
-                                {m.email}
-                              </td>
-
-                              <td className="px-5 py-3">
-                                <div className="flex justify-end gap-3">
-                                  {canEdit && (
-                                    <button
-                                      onClick={() => handleRemoveUser(m.id)}
-                                      className="text-xs font-medium text-red-500 hover:underline"
-                                    >
-                                      Loại
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-
-                    <div className="flex items-center justify-between px-5 py-3">
-                      {canEdit ? (
-                        <button
-                          onClick={() => openMembers(group)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#4f63ff] text-xl leading-none text-[#4f63ff] hover:bg-[#4f63ff] hover:text-white"
-                        >
-                          +
-                        </button>
+                    {/* MEMBERS */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {members.length === 0 ? (
+                        <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                          {t("noMembers")}
+                        </div>
                       ) : (
-                        <span />
+                        <div className="space-y-2">
+                          {members.slice(0, 6).map((m) => (
+                            <div
+                              key={m.id}
+                              className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8eef8] font-bold text-[#193153]">
+                                {(m.fullname || m.email)
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-slate-900">
+                                  {m.fullname || "—"}
+                                </p>
+
+                                <p className="truncate text-xs text-slate-500">
+                                  {m.email}
+                                </p>
+                              </div>
+
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleRemoveUser(m.id)}
+                                  className="text-xs font-medium text-red-500 hover:underline"
+                                >
+                                  {t("remove")}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          {members.length > 6 && (
+                            <div className="pt-2 text-center text-xs font-medium text-slate-500">
+                              + {members.length - 6} thành viên khác
+                            </div>
+                          )}
+                        </div>
                       )}
+                    </div>
+
+                    {/* FOOTER */}
+                    <div className="flex items-center justify-between border-t px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        {canEdit && (
+                          <button
+                            onClick={() => openEdit(group)}
+                            className="text-xs font-medium text-[#193153]"
+                          >
+                            {t("edit")}
+                          </button>
+                        )}
+
+                        {canEdit && (
+                          <button
+                            disabled={members.length > 0}
+                            onClick={() => askDeleteGroup(group.id)}
+                            className={`text-xs font-medium ${
+                              members.length > 0
+                                ? "cursor-not-allowed text-slate-400"
+                                : "text-red-500 hover:underline"
+                            }`}
+                          >
+                            {t("delete")}
+                          </button>
+                        )}
+                      </div>
 
                       <button
                         onClick={() => openMembers(group)}
                         className="rounded-lg bg-black px-4 py-2 text-xs font-medium text-white"
                       >
-                        Quản lý thành viên
+                        {t("manageMembers")}
                       </button>
                     </div>
                   </div>
@@ -454,7 +591,7 @@ export default function GroupPage() {
         <Modal
           open={groupModal}
           onClose={() => setGroupModal(false)}
-          title={editingGroup ? "Cập nhật nhóm" : "Tạo nhóm mới"}
+          title={editingGroup ? t("modalUpdate") : t("modalCreate")}
         >
           <div className="space-y-4">
             {error && (
@@ -468,8 +605,9 @@ export default function GroupPage() {
                 className="mb-1.5 block text-xs font-medium uppercase tracking-wider"
                 style={{ color: "var(--text-secondary)" }}
               >
-                Tên nhóm
+                {t("groupName")}
               </label>
+
               <input
                 className={inputCls}
                 style={formErrors.name ? errorInputStyle : inputStyle}
@@ -479,6 +617,7 @@ export default function GroupPage() {
                   setFormErrors((prev) => ({ ...prev, name: undefined }));
                 }}
               />
+
               {formErrors.name && (
                 <p className="mt-1 px-1 text-xs font-medium text-red-500">
                   {formErrors.name}
@@ -491,8 +630,9 @@ export default function GroupPage() {
                 className="mb-1.5 block text-xs font-medium uppercase tracking-wider"
                 style={{ color: "var(--text-secondary)" }}
               >
-                Mô tả
+                {t("description")}
               </label>
+
               <textarea
                 rows={2}
                 className={inputCls}
@@ -509,6 +649,7 @@ export default function GroupPage() {
                   }));
                 }}
               />
+
               {formErrors.description && (
                 <p className="mt-1 px-1 text-xs font-medium text-red-500">
                   {formErrors.description}
@@ -524,7 +665,7 @@ export default function GroupPage() {
                   setGroupForm((f) => ({ ...f, isActive: e.target.checked }))
                 }
               />
-              Kích hoạt nhóm
+              {t("activeGroup")}
             </label>
 
             <div className="flex gap-3 pt-2">
@@ -536,15 +677,16 @@ export default function GroupPage() {
                   color: "var(--text-secondary)",
                 }}
               >
-                Hủy
+                {t("cancel")}
               </button>
+
               <button
                 onClick={handleSaveGroup}
                 disabled={saving}
                 className="flex-1 cursor-pointer rounded-xl py-2.5 text-sm font-medium disabled:opacity-60"
                 style={{ background: "var(--bg-sidebar)", color: "#f0efe8" }}
               >
-                {saving ? "Đang lưu..." : "Lưu"}
+                {saving ? t("saving") : t("save")}
               </button>
             </div>
           </div>
@@ -553,7 +695,7 @@ export default function GroupPage() {
         <Modal
           open={memberModal}
           onClose={() => setMemberModal(false)}
-          title={`Thành viên — ${selectedGroup?.name}`}
+          title={t("memberTitle", { name: selectedGroup?.name || "" })}
         >
           <div className="space-y-4">
             {error && (
@@ -567,14 +709,16 @@ export default function GroupPage() {
                 className="mb-2 text-xs font-semibold uppercase tracking-wider"
                 style={{ color: "var(--text-muted)" }}
               >
-                Danh sách hiện tại
+                {t("currentMembers")}
               </p>
+
               <div className="max-h-40 space-y-1.5 overflow-y-auto">
                 {membersInModal.length === 0 && (
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    Chưa có thành viên
+                    {t("noMembers")}
                   </p>
                 )}
+
                 {membersInModal.map((m) => (
                   <div
                     key={m.id}
@@ -583,6 +727,7 @@ export default function GroupPage() {
                   >
                     <div>
                       <p className="text-sm font-medium">{m.fullname || "—"}</p>
+
                       <p
                         className="text-xs"
                         style={{ color: "var(--text-muted)" }}
@@ -590,13 +735,14 @@ export default function GroupPage() {
                         {m.email}
                       </p>
                     </div>
+
                     {canEdit && (
                       <button
                         onClick={() => handleRemoveUser(m.id)}
                         className="cursor-pointer text-xs"
                         style={{ color: "var(--danger)" }}
                       >
-                        Loại
+                        {t("remove")}
                       </button>
                     )}
                   </div>
@@ -615,8 +761,9 @@ export default function GroupPage() {
                   className="mb-2 text-xs font-semibold uppercase tracking-wider"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  Thêm thành viên
+                  {t("addMember")}
                 </p>
+
                 <div className="flex gap-2">
                   <select
                     className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
@@ -630,22 +777,25 @@ export default function GroupPage() {
                       }));
                     }}
                   >
-                    <option value="">Chọn người dùng</option>
+                    <option value="">{t("selectUser")}</option>
+
                     {usersNotInGroup.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.fullname || u.email}
                       </option>
                     ))}
                   </select>
+
                   <button
                     onClick={handleAddUser}
                     disabled={saving}
                     className="cursor-pointer rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
                     style={{ background: "var(--accent)", color: "white" }}
                   >
-                    Thêm
+                    {t("add")}
                   </button>
                 </div>
+
                 {formErrors.addUserId && (
                   <p className="mt-1 px-1 text-xs font-medium text-red-500">
                     {formErrors.addUserId}
