@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { groupApi, userApi, safeCall } from "@/src/lib/api";
 import { GroupResponse, GroupUserResponse, UserResponse } from "@/src/types";
 import { useAuth } from "@/src/hook/useAuth";
-
+import { useRouter } from "next/navigation";
 type FormErrors = Partial<{
   name: string;
   description: string;
@@ -152,9 +152,15 @@ function Modal({
 export default function GroupPage() {
   const t = useTranslations("groupMgmt");
   const { hasPermission } = useAuth();
+  const router = useRouter();
   const canEdit = hasPermission("GROUP_MANAGEMENT", "canEdit");
-
+  const canView = hasPermission("GROUP_MANAGEMENT", "canView");
   const [groups, setGroups] = useState<GroupResponse[]>([]);
+  useEffect(() => {
+    if (!canView) {
+      router.replace("/403"); //  ADD
+    }
+  }, [canView, router]);
   const [groupUsers, setGroupUsers] = useState<
     Record<number, GroupUserResponse[]>
   >({});

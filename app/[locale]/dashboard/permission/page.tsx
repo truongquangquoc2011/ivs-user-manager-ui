@@ -6,6 +6,7 @@ import { groupApi, featureApi, safeCall } from "@/src/lib/api";
 import { GroupResponse, FeatureResponse, GroupPermission } from "@/src/types";
 import { useAuth } from "@/src/hook/useAuth";
 import { useRouter } from "next/navigation";
+
 function Toast({
   type,
   message,
@@ -39,6 +40,10 @@ export default function PermissionPage() {
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("PERMISSION_MANAGEMENT", "canEdit");
 
+  //  ADD: canView + router
+  const router = useRouter();
+  const canView = hasPermission("PERMISSION_MANAGEMENT", "canView");
+
   const [groups, setGroups] = useState<GroupResponse[]>([]);
   const [features, setFeatures] = useState<FeatureResponse[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupResponse | null>(null);
@@ -56,6 +61,13 @@ export default function PermissionPage() {
     setToast({ type, message });
     setTimeout(() => setToast(null), 2500);
   };
+
+  //  ADD: redirect 403
+  useEffect(() => {
+    if (!canView) {
+      router.replace("/403");
+    }
+  }, [canView, router]);
 
   useEffect(() => {
     const init = async () => {
@@ -280,18 +292,12 @@ export default function PermissionPage() {
                 >
                   <td className="px-5 py-4">
                     <p className="text-sm font-medium">{perm.featureName}</p>
-                    <p
-                      className="text-xs mt-0.5 font-mono"
-                      style={{ color: "var(--text-muted)" }}
-                    >
+                    <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--text-muted)" }}>
                       {perm.featureCode}
                     </p>
                   </td>
 
-                  <td
-                    className="px-5 py-4 text-xs font-mono"
-                    style={{ color: "var(--text-muted)" }}
-                  >
+                  <td className="px-5 py-4 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
                     {perm.featurePath || "—"}
                   </td>
 
